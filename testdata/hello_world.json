@@ -1,0 +1,92 @@
+[
+  {
+    "Type": 2,
+    "Data": "\n#include \u003cstdio.h\u003e\n",
+    "LineStart": 1,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 1,
+    "Data": "/*******************************************************************************\n * hello_world.c\n */",
+    "LineStart": 3,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 2,
+    "Data": " #include \u003cstdio.h\u003e\n\n",
+    "LineStart": 5,
+    "ColumnStart": 4
+  },
+  {
+    "Type": 1,
+    "Data": "/* PUTS\n * multi-line comment\n */",
+    "LineStart": 7,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 2,
+    "Data": "\n#define PUTS( _s ) { \\\n    fputs( _s, stdout ); \\\n}\n\n",
+    "LineStart": 9,
+    "ColumnStart": 4
+  },
+  {
+    "Type": 1,
+    "Data": "// Main function\n",
+    "LineStart": 14,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 2,
+    "Data": "int\nmain( void )\n{\n    PUTS( \"Hello World 1\\n\" ); ",
+    "LineStart": 15,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 1,
+    "Data": "// comment 1\n",
+    "LineStart": 18,
+    "ColumnStart": 32
+  },
+  {
+    "Type": 2,
+    "Data": "    PUTS( \"Hello World 2\\n\" ); ",
+    "LineStart": 19,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 1,
+    "Data": "// comment 2\n",
+    "LineStart": 19,
+    "ColumnStart": 32
+  },
+  {
+    "Type": 2,
+    "Data": "    PUTS(\n        \"Hello // World 2\\n\"\n    ); ",
+    "LineStart": 20,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 1,
+    "Data": "// prints \"Hello // World 2 \\n\"\n",
+    "LineStart": 22,
+    "ColumnStart": 8
+  },
+  {
+    "Type": 2,
+    "Data": "    return 0;\n}\n\n#if 0\n",
+    "LineStart": 23,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 1,
+    "Data": "/* Allow nested /* comments even though not supported by most compilers */ */",
+    "LineStart": 27,
+    "ColumnStart": 1
+  },
+  {
+    "Type": 2,
+    "Data": "\n#endif\n",
+    "LineStart": 27,
+    "ColumnStart": 78
+  }
+]
