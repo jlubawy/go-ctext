@@ -14,8 +14,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
-	"github.com/jlubawy/go-ctext/ctext"
+	"github.com/jlubawy/go-ctext"
 )
 
 func main() {
@@ -35,24 +36,27 @@ func main() {
 	}
 	defer f.Close()
 
+	_, file := filepath.Split(flag.Arg(0))
+
 	tokens := make([]ctext.Token, 0)
-	z := ctext.NewScanner(f)
+	s := ctext.NewScanner(f)
+	s.Filename = file
 	for {
-		tt := z.Next()
+		tt := s.Next()
 
 		switch tt {
 		case ctext.ErrorToken:
-			err := z.Err()
+			err := s.Err()
 			if err == io.EOF {
 				goto DONE
 			}
-			fatalf("Error tokenizing file: %v\n", err)
+			fatalf("Error scanning file: %v\n", err)
 
 		case ctext.CommentToken:
-			tokens = append(tokens, z.Token())
+			tokens = append(tokens, s.Token())
 
 		case ctext.TextToken:
-			tokens = append(tokens, z.Token())
+			tokens = append(tokens, s.Token())
 		}
 	}
 

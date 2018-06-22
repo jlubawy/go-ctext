@@ -31,30 +31,31 @@ func TestScanner(t *testing.T) {
 	}
 
 	tokens := make([]Token, 0)
-	z := NewScanner(cF)
+	s := NewScanner(cF)
+	s.Filename = "hello_world.c"
 	for {
-		tt := z.Next()
+		tt := s.Next()
 
 		switch tt {
 		case ErrorToken:
-			err := z.Err()
+			err := s.Err()
 			if err == io.EOF {
 				goto DONE
 			}
-			t.Fatalf("Error tokenizing file: %v\n", err)
+			t.Fatalf("Error scanning file: %v\n", err)
 
 		case CommentToken:
-			tokens = append(tokens, z.Token())
+			tokens = append(tokens, s.Token())
 
 		case TextToken:
-			tokens = append(tokens, z.Token())
+			tokens = append(tokens, s.Token())
 		}
 	}
 
 DONE:
 	if !reflect.DeepEqual(tokens, expTokens) {
 		t.Error("tokens do not match")
-		t.Logf("%+v", tokens)
 		t.Logf("%+v", expTokens)
+		t.Logf("%+v", tokens)
 	}
 }

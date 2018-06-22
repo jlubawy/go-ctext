@@ -25,10 +25,10 @@ type MacroFunc struct {
 	Args []string
 
 	// LineStart is the line that the macro invocation starts on.
-	LineStart uint32
+	LineStart int
 
 	// LineEnd is the line that the macro invocation end on.
-	LineEnd uint32
+	LineEnd int
 }
 
 func isMacroDef(s string, ni int) (isDef bool) {
@@ -77,7 +77,7 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 
 	var (
 		s        = tok.Data
-		lineCurr = tok.LineStart
+		lineCurr = tok.Position.Line
 	)
 
 	for {

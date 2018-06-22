@@ -47,10 +47,12 @@ func TestIsMacroDef(t *testing.T) {
 
 func newTextToken(s string) *ctext.Token {
 	return &ctext.Token{
-		Type:        ctext.TextToken,
-		Data:        s,
-		LineStart:   1,
-		ColumnStart: 1,
+		Type: ctext.TextToken,
+		Data: s,
+		Position: ctext.Position{
+			Line:   1,
+			Column: 1,
+		},
 	}
 }
 
