@@ -101,95 +101,95 @@ func NewScanner(r io.Reader) *Scanner {
 
 // Err returns the error associated with the most recent ErrorToken token.
 // This is typically io.EOF, meaning the end of tokenization.
-func (z *Scanner) Err() error {
-	if z.currentTT == ErrorToken && z.err == nil {
+func (s *Scanner) Err() error {
+	if s.currentTT == ErrorToken && s.err == nil {
 		panic("token type was error but there was no error")
 	}
-	return z.err
+	return s.err
 }
 
 // Next returns the next token type to be processed.
-func (z *Scanner) Next() TokenType {
+func (s *Scanner) Next() TokenType {
 	// Return error right away if one already exists
-	if z.err != nil {
+	if s.err != nil {
 		return ErrorToken
 	}
 
 	// Reset the buffer length to 0
-	z.buf = z.buf[:0]
+	s.buf = s.buf[:0]
 
 	// Reset scanner fields
-	z.currentTT = ErrorToken
-	z.inStringLiteral = false
-	z.mlCommentCount = 0
-	z.inSLComment = false
+	s.currentTT = ErrorToken
+	s.inStringLiteral = false
+	s.mlCommentCount = 0
+	s.inSLComment = false
 
-	z.startPosition = z.Position
-	z.startPosition.Line = 0
-	z.startPosition.Column = 0
+	s.startPosition = s.Position
+	s.startPosition.Line = 0
+	s.startPosition.Column = 0
 
 	for done := false; !done; {
 		// Peek one character first so we can skip any chars we don't want
 		var bs []byte
-		bs, z.err = z.br.Peek(1)
-		if z.err != nil {
-			if z.err == io.EOF {
-				if len(z.buf) > 0 {
+		bs, s.err = s.br.Peek(1)
+		if s.err != nil {
+			if s.err == io.EOF {
+				if len(s.buf) > 0 {
 					// If EOF but there is data in the buffer then process it first,
 					// the EOF will be returned on the next call to this function.
-					if z.mlCommentCount > 0 {
-						z.err = errors.New("unexpected end of multi-line comment")
-						z.currentTT = ErrorToken
-					} else if z.inSLComment {
-						z.currentTT = TextToken
+					if s.mlCommentCount > 0 {
+						s.err = errors.New("unexpected end of multi-line comment")
+						s.currentTT = ErrorToken
+					} else if s.inSLComment {
+						s.currentTT = TextToken
 					} else {
-						z.currentTT = TextToken
+						s.currentTT = TextToken
 					}
-					return z.currentTT
+					return s.currentTT
 				}
 			}
 
 			return ErrorToken
 		}
 
-		if z.startPosition.Line == 0 {
-			z.startPosition.Line = z.Position.Line
-			if z.Position.Column == 0 {
-				z.startPosition.Column = 1
+		if s.startPosition.Line == 0 {
+			s.startPosition.Line = s.Position.Line
+			if s.Position.Column == 0 {
+				s.startPosition.Column = 1
 			} else {
-				z.startPosition.Column = z.Position.Column
+				s.startPosition.Column = s.Position.Column
 			}
 		}
 
 		b := bs[0]
 		switch b {
 		case '/':
-			if !z.inSLComment && z.mlCommentCount == 0 {
+			if !s.inSLComment && s.mlCommentCount == 0 {
 				// If not in a comment
 
-				if !z.inStringLiteral {
+				if !s.inStringLiteral {
 					// If not in a string literal check if this is the start
 					// of a single-line comment.
-					lc, ok := internal.LastChar(z.buf)
+					lc, ok := internal.LastChar(s.buf)
 					if ok && lc == '/' {
 						// Check if this is the start of a comment
-						z.inSLComment = true
-						z.startPosition.Line, z.startPosition.Column = z.Position.Line, z.Position.Column-1
-					} else if len(z.buf) > 0 {
+						s.inSLComment = true
+						s.startPosition.Line, s.startPosition.Column = s.Position.Line, s.Position.Column-1
+					} else if len(s.buf) > 0 {
 						// If the buffer is not empty then process the text first
-						z.currentTT = TextToken
-						return z.currentTT
+						s.currentTT = TextToken
+						return s.currentTT
 					}
 				}
 
-			} else if z.mlCommentCount > 0 {
+			} else if s.mlCommentCount > 0 {
 				// Else if in a multi-line comment
-				lc, ok := internal.LastChar(z.buf)
+				lc, ok := internal.LastChar(s.buf)
 				if ok && lc == '*' {
-					z.mlCommentCount -= 1
+					s.mlCommentCount -= 1
 
-					if z.mlCommentCount == 0 {
-						z.currentTT = CommentToken
+					if s.mlCommentCount == 0 {
+						s.currentTT = CommentToken
 						done = true
 					}
 				}
@@ -199,80 +199,80 @@ func (z *Scanner) Next() TokenType {
 
 		case '*':
 			// Possible start or end of multi-line comment
-			lc, ok := internal.LastChar(z.buf)
+			lc, ok := internal.LastChar(s.buf)
 			if ok && lc == '/' {
-				z.mlCommentCount += 1
-				if z.mlCommentCount == 1 {
-					z.startPosition.Line, z.startPosition.Column = z.Position.Line, z.Position.Column-1
+				s.mlCommentCount += 1
+				if s.mlCommentCount == 1 {
+					s.startPosition.Line, s.startPosition.Column = s.Position.Line, s.Position.Column-1
 				}
 			}
 
 		case '\r':
 			// Discard and wait for the \n
-			_, z.err = z.br.Discard(1)
-			if z.err != nil {
+			_, s.err = s.br.Discard(1)
+			if s.err != nil {
 				return ErrorToken
 			}
 
-			z.Position.Column += 1
+			s.Position.Column += 1
 
 			continue
 
 		case '\n':
 			// Increment the line and reset the current column
-			z.Position.Line += 1
-			z.Position.Column = 0
+			s.Position.Line += 1
+			s.Position.Column = 0
 
-			if z.mlCommentCount > 0 {
+			if s.mlCommentCount > 0 {
 				// If in a multi-line comment then continue processing
-			} else if z.inSLComment {
-				z.inSLComment = false
-				z.currentTT = CommentToken
+			} else if s.inSLComment {
+				s.inSLComment = false
+				s.currentTT = CommentToken
 				done = true
 			}
 
 		case '"':
-			if !z.inSLComment && z.mlCommentCount == 0 {
-				lc, ok := internal.LastChar(z.buf)
+			if !s.inSLComment && s.mlCommentCount == 0 {
+				lc, ok := internal.LastChar(s.buf)
 				if ok && lc != '\\' {
-					z.inStringLiteral = !z.inStringLiteral
+					s.inStringLiteral = !s.inStringLiteral
 				}
 			}
 		}
 
-		b, z.err = z.br.ReadByte()
-		if z.err != nil {
+		b, s.err = s.br.ReadByte()
+		if s.err != nil {
 			// EOF is not expected since we already peeked successfully above
 			return ErrorToken
 		}
 
-		z.Position.Column += 1
+		s.Position.Column += 1
 
-		z.buf, z.err = internal.AddChar(&z.buf, z.maxBuf, b)
-		if z.err != nil {
+		s.buf, s.err = internal.AddChar(&s.buf, s.maxBuf, b)
+		if s.err != nil {
 			return ErrorToken
 		}
 	}
 
-	return z.currentTT
+	return s.currentTT
 }
 
 // SetMaxBuf sets the maximum buffer allowed by the scanner. Zero is the default
 // and it means an unlimited buffer size.
-func (z *Scanner) SetMaxBuf(maxBuf uint) {
-	z.maxBuf = int(maxBuf)
+func (s *Scanner) SetMaxBuf(maxBuf uint) {
+	s.maxBuf = int(maxBuf)
 }
 
 // Token returns the last token returned by Next.
-func (z *Scanner) Token() Token {
+func (s *Scanner) Token() Token {
 	return Token{
-		Type:     z.currentTT,
-		Position: z.startPosition,
-		Data:     string(z.buf[:]),
+		Type:     s.currentTT,
+		Position: s.startPosition,
+		Data:     string(s.buf[:]),
 	}
 }
 
 // TokenString returns the last token string returned by Next.
-func (z *Scanner) TokenString() string {
-	return string(z.buf[:])
+func (s *Scanner) TokenString() string {
+	return string(s.buf[:])
 }
