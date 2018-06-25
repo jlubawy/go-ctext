@@ -5,53 +5,41 @@
 package internal
 
 import (
+	"bytes"
 	"testing"
 )
 
-func TestAddChar(t *testing.T) {
+func TestLastByte(t *testing.T) {
 	var cases = []struct {
-		Buf    []byte
-		MaxBuf int
-		ExpErr bool
+		Input    string
+		LastByte byte
+		Ok       bool
 	}{
-		// No errors
 		{
-			Buf:    make([]byte, 0, 0),
-			MaxBuf: 0,
-			ExpErr: false,
+			Input:    "",
+			LastByte: 0,
+			Ok:       false,
 		},
 		{
-			Buf:    make([]byte, 0, 0),
-			MaxBuf: 1,
-			ExpErr: false,
+			Input:    "a",
+			LastByte: 'a',
+			Ok:       true,
 		},
 		{
-			Buf:    make([]byte, 0, 1),
-			MaxBuf: 1,
-			ExpErr: false,
-		},
-
-		// Errors
-		{
-			Buf:    make([]byte, 1, 1),
-			MaxBuf: 1,
-			ExpErr: true,
+			Input:    "ab",
+			LastByte: 'b',
+			Ok:       true,
 		},
 	}
 
 	for _, tc := range cases {
-		buf, err := AddChar(&tc.Buf, tc.MaxBuf, 'c')
-		if err != nil {
-			if !tc.ExpErr {
-				t.Errorf("unexpected error: %v", err)
-			}
+		buf := bytes.NewBufferString(tc.Input)
+		lb, ok := LastByte(buf)
+		if ok != tc.Ok {
+			t.Errorf("expected %t but got %t", tc.Ok, ok)
 		} else {
-			if tc.ExpErr {
-				t.Error("expected error")
-			} else {
-				if buf[len(buf)-1] != 'c' {
-					t.Error("unexpected character")
-				}
+			if ok && lb != tc.LastByte {
+				t.Errorf("expected byte 0x%02X but got 0x%02X", tc.LastByte, lb)
 			}
 		}
 	}

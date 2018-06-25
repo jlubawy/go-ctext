@@ -3,13 +3,14 @@
 // license that can be found in the LICENSE file.
 
 /*
-Package ctext implements a naive C source scanner that can be used to separate
+Package ctext implements a simple C source scanner that can be used to separate
 comments from code.
 */
 package ctext
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -52,35 +53,20 @@ func (pos Position) String() string {
 	return s
 }
 
-// A Token is either of type Comment or Text.
-type Token struct {
-	// Type is the token type.
-	Type TokenType
-
-	// Position is the position within a file that the token was found.
-	Position
-
-	// Data is the token content.
-	Data string
-}
-
 // A Scanner is used to split a C source file into comment and text tokens for
 // further processing.
 type Scanner struct {
 	// Position is the current position of the scanner within a file.
 	Position
 
-	br     *bufio.Reader
-	maxBuf int
-	buf    []byte
+	posCurr Position
+
+	br  *bufio.Reader
+	buf *bytes.Buffer
 
 	err error
 
-	// Track lines and positions
-	startPosition Position
-
 	// Should be reset every invocation of Next
-	currentTT       TokenType
 	inStringLiteral bool
 	mlCommentCount  int
 	inSLComment     bool
@@ -89,44 +75,39 @@ type Scanner struct {
 // NewScanner returns a pointer to a new C source scanner.
 func NewScanner(r io.Reader) *Scanner {
 	return &Scanner{
-		Position: Position{
+		posCurr: Position{
 			Line:   1,
 			Column: 1,
 		},
 
 		br:  bufio.NewReader(r),
-		buf: make([]byte, 0, 4096),
+		buf: &bytes.Buffer{},
 	}
 }
 
 // Err returns the error associated with the most recent ErrorToken token.
 // This is typically io.EOF, meaning the end of tokenization.
 func (s *Scanner) Err() error {
-	if s.currentTT == ErrorToken && s.err == nil {
-		panic("token type was error but there was no error")
-	}
 	return s.err
 }
 
 // Next returns the next token type to be processed.
-func (s *Scanner) Next() TokenType {
-	// Return error right away if one already exists
+func (s *Scanner) Next() (tt TokenType) {
 	if s.err != nil {
-		return ErrorToken
+		return ErrorToken // return error right away if one already exists
 	}
 
-	// Reset the buffer length to 0
-	s.buf = s.buf[:0]
+	// Reset the buffer
+	s.buf.Reset()
+
+	// Reset and invalidate the current position
+	s.Position.Line = 0
+	s.Position.Column = 0
 
 	// Reset scanner fields
-	s.currentTT = ErrorToken
 	s.inStringLiteral = false
 	s.mlCommentCount = 0
 	s.inSLComment = false
-
-	s.startPosition = s.Position
-	s.startPosition.Line = 0
-	s.startPosition.Column = 0
 
 	for done := false; !done; {
 		// Peek one character first so we can skip any chars we don't want
@@ -134,30 +115,30 @@ func (s *Scanner) Next() TokenType {
 		bs, s.err = s.br.Peek(1)
 		if s.err != nil {
 			if s.err == io.EOF {
-				if len(s.buf) > 0 {
+				if s.buf.Len() > 0 {
 					// If EOF but there is data in the buffer then process it first,
 					// the EOF will be returned on the next call to this function.
 					if s.mlCommentCount > 0 {
 						s.err = errors.New("unexpected end of multi-line comment")
-						s.currentTT = ErrorToken
+						tt = ErrorToken
 					} else if s.inSLComment {
-						s.currentTT = TextToken
+						tt = TextToken
 					} else {
-						s.currentTT = TextToken
+						tt = TextToken
 					}
-					return s.currentTT
+					return
 				}
 			}
 
 			return ErrorToken
 		}
 
-		if s.startPosition.Line == 0 {
-			s.startPosition.Line = s.Position.Line
-			if s.Position.Column == 0 {
-				s.startPosition.Column = 1
+		if s.Position.Line == 0 {
+			s.Position.Line = s.posCurr.Line
+			if s.posCurr.Column == 0 {
+				s.Position.Column = 1
 			} else {
-				s.startPosition.Column = s.Position.Column
+				s.Position.Column = s.posCurr.Column
 			}
 		}
 
@@ -170,26 +151,26 @@ func (s *Scanner) Next() TokenType {
 				if !s.inStringLiteral {
 					// If not in a string literal check if this is the start
 					// of a single-line comment.
-					lc, ok := internal.LastChar(s.buf)
-					if ok && lc == '/' {
+					lb, ok := internal.LastByte(s.buf)
+					if ok && lb == '/' {
 						// Check if this is the start of a comment
 						s.inSLComment = true
-						s.startPosition.Line, s.startPosition.Column = s.Position.Line, s.Position.Column-1
-					} else if len(s.buf) > 0 {
+						s.Position.Line, s.Position.Column = s.posCurr.Line, s.posCurr.Column-1
+					} else if s.buf.Len() > 0 {
 						// If the buffer is not empty then process the text first
-						s.currentTT = TextToken
-						return s.currentTT
+						tt = TextToken
+						return
 					}
 				}
 
 			} else if s.mlCommentCount > 0 {
 				// Else if in a multi-line comment
-				lc, ok := internal.LastChar(s.buf)
-				if ok && lc == '*' {
+				lb, ok := internal.LastByte(s.buf)
+				if ok && lb == '*' {
 					s.mlCommentCount -= 1
 
 					if s.mlCommentCount == 0 {
-						s.currentTT = CommentToken
+						tt = CommentToken
 						done = true
 					}
 				}
@@ -199,11 +180,11 @@ func (s *Scanner) Next() TokenType {
 
 		case '*':
 			// Possible start or end of multi-line comment
-			lc, ok := internal.LastChar(s.buf)
-			if ok && lc == '/' {
+			lb, ok := internal.LastByte(s.buf)
+			if ok && lb == '/' {
 				s.mlCommentCount += 1
 				if s.mlCommentCount == 1 {
-					s.startPosition.Line, s.startPosition.Column = s.Position.Line, s.Position.Column-1
+					s.Position.Line, s.Position.Column = s.posCurr.Line, s.posCurr.Column-1
 				}
 			}
 
@@ -214,27 +195,27 @@ func (s *Scanner) Next() TokenType {
 				return ErrorToken
 			}
 
-			s.Position.Column += 1
+			s.posCurr.Column += 1
 
 			continue
 
 		case '\n':
 			// Increment the line and reset the current column
-			s.Position.Line += 1
-			s.Position.Column = 0
+			s.posCurr.Line += 1
+			s.posCurr.Column = 0
 
 			if s.mlCommentCount > 0 {
 				// If in a multi-line comment then continue processing
 			} else if s.inSLComment {
 				s.inSLComment = false
-				s.currentTT = CommentToken
+				tt = CommentToken
 				done = true
 			}
 
 		case '"':
 			if !s.inSLComment && s.mlCommentCount == 0 {
-				lc, ok := internal.LastChar(s.buf)
-				if ok && lc != '\\' {
+				lb, ok := internal.LastByte(s.buf)
+				if ok && lb != '\\' {
 					s.inStringLiteral = !s.inStringLiteral
 				}
 			}
@@ -246,33 +227,19 @@ func (s *Scanner) Next() TokenType {
 			return ErrorToken
 		}
 
-		s.Position.Column += 1
+		s.posCurr.Column += 1
 
-		s.buf, s.err = internal.AddChar(&s.buf, s.maxBuf, b)
+		s.err = s.buf.WriteByte(b)
 		if s.err != nil {
 			return ErrorToken
 		}
 	}
 
-	return s.currentTT
+	return
 }
 
-// SetMaxBuf sets the maximum buffer allowed by the scanner. Zero is the default
-// and it means an unlimited buffer size.
-func (s *Scanner) SetMaxBuf(maxBuf uint) {
-	s.maxBuf = int(maxBuf)
-}
-
-// Token returns the last token returned by Next.
-func (s *Scanner) Token() Token {
-	return Token{
-		Type:     s.currentTT,
-		Position: s.startPosition,
-		Data:     string(s.buf[:]),
-	}
-}
-
-// TokenString returns the last token string returned by Next.
-func (s *Scanner) TokenString() string {
-	return string(s.buf[:])
+// TokenText returns the string corresponding to the most recently scanned
+// token. Valid after calling Scan().
+func (s *Scanner) TokenText() string {
+	return s.buf.String()
 }

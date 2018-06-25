@@ -8,6 +8,7 @@ Package cmacro finds all function-like macros called within a C source file.
 package cmacro
 
 import (
+	"bytes"
 	"errors"
 	"regexp"
 	"strings"
@@ -60,25 +61,22 @@ func isMacroDef(s string, ni int) (isDef bool) {
 
 // FindMacroFuncs finds all invocations of the macro functions matching
 // the provided names in a given string.
-func FindMacroFuncs(tok *ctext.Token, names ...string) (mfs []MacroFunc, err error) {
+func FindMacroFuncs(s string, pos ctext.Position, names ...string) (mfs []MacroFunc, err error) {
 	var re *regexp.Regexp
 	re, err = compileNamesRegexp(names...)
 	if err != nil {
 		return
 	}
 
-	return FindMacroFuncsRegexp(tok, re)
+	return FindMacroFuncsRegexp(s, pos, re)
 }
 
 // FindMacroFuncsRegexp finds all invocations of the macro functions matching
 // the provided regexp in a given string.
-func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc, err error) {
+func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs []MacroFunc, err error) {
 	mfs = make([]MacroFunc, 0)
 
-	var (
-		s        = tok.Data
-		lineCurr = tok.Position.Line
-	)
+	var lineCurr = pos.Line
 
 	for {
 		// Find the next instance of the macro name
@@ -127,8 +125,7 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 			done            bool
 			inStringLiteral bool
 			parenCount      int
-			maxBuf          int
-			buf             = make([]byte, 0, 4096)
+			buf             = &bytes.Buffer{}
 		)
 
 		// Iterate over the rest of the characters
@@ -140,13 +137,13 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 			case ' ':
 				if inStringLiteral || parenCount > 0 {
 					// If in a string literal then add the space
-					buf, err = internal.AddChar(&buf, maxBuf, b)
+					err = buf.WriteByte(b)
 					if err != nil {
 						return
 					}
 				} else if parenCount == 0 {
 					// Else it's probably the end of an argument
-					arg, ok := parseArg(&buf)
+					arg, ok := parseArg(buf)
 					if ok {
 						mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
 					}
@@ -155,13 +152,13 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 			case ',':
 				if inStringLiteral || parenCount > 0 {
 					// If in a string literal add the comma
-					buf, err = internal.AddChar(&buf, maxBuf, b)
+					err = buf.WriteByte(b)
 					if err != nil {
 						return
 					}
 				} else if parenCount == 0 {
 					// Else it's probably the end of an argument
-					arg, ok := parseArg(&buf)
+					arg, ok := parseArg(buf)
 					if ok {
 						mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
 					}
@@ -169,11 +166,11 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 
 			case '"':
 				if inStringLiteral {
-					lc, ok := internal.LastChar(buf)
-					if ok && lc == '\\' {
+					lb, ok := internal.LastByte(buf)
+					if ok && lb == '\\' {
 						// If in a string literal, but this quote was escaped
 						// then add it to the buffer
-						buf, err = internal.AddChar(&buf, maxBuf, b)
+						err = buf.WriteByte(b)
 						if err != nil {
 							return
 						}
@@ -181,12 +178,12 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 						// Else leaving a string literal, which has to be the end
 						// of an argument
 						inStringLiteral = false
-						buf, err = internal.AddChar(&buf, maxBuf, b)
+						err = buf.WriteByte(b)
 						if err != nil {
 							return
 						}
 						if parenCount == 0 {
-							arg, ok := parseArg(&buf)
+							arg, ok := parseArg(buf)
 							if ok {
 								mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
 							}
@@ -195,7 +192,7 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 				} else {
 					// Else not in a string literal, so we are now
 					inStringLiteral = true
-					buf, err = internal.AddChar(&buf, maxBuf, b)
+					err = buf.WriteByte(b)
 					if err != nil {
 						return
 					}
@@ -203,7 +200,7 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 
 			case '(':
 				// Add any opening paren
-				buf, err = internal.AddChar(&buf, maxBuf, b)
+				err = buf.WriteByte(b)
 				if err != nil {
 					return
 				}
@@ -216,14 +213,14 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 			case ')':
 				if inStringLiteral {
 					// If in a string literal add the closing paren
-					buf, err = internal.AddChar(&buf, maxBuf, b)
+					err = buf.WriteByte(b)
 					if err != nil {
 						return
 					}
 				} else {
 					if parenCount > 0 {
 						// If inside another invocation add the closing paren
-						buf, err = internal.AddChar(&buf, maxBuf, b)
+						err = buf.WriteByte(b)
 						if err != nil {
 							return
 						}
@@ -233,7 +230,7 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 					}
 
 					if parenCount == 0 {
-						arg, ok := parseArg(&buf)
+						arg, ok := parseArg(buf)
 						if ok {
 							mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
 						}
@@ -243,7 +240,7 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 			case ';':
 				if inStringLiteral {
 					// If in a string literal add the semi-colon
-					buf, err = internal.AddChar(&buf, maxBuf, b)
+					err = buf.WriteByte(b)
 					if err != nil {
 						return
 					}
@@ -262,7 +259,7 @@ func FindMacroFuncsRegexp(tok *ctext.Token, re *regexp.Regexp) (mfs []MacroFunc,
 				lineCurr += 1
 
 			default:
-				buf, err = internal.AddChar(&buf, maxBuf, b)
+				err = buf.WriteByte(b)
 				if err != nil {
 					return
 				}
@@ -281,12 +278,11 @@ DONE:
 
 // parseArg returns an argument string and shortens the buffer length to zero if
 // the provided buffer isn't empty.
-func parseArg(bufP *[]byte) (buf []byte, ok bool) {
-	buf = *bufP
-	buf = []byte(strings.TrimSpace(string(buf)))
-	if len(buf) > 0 {
+func parseArg(buf *bytes.Buffer) (arg string, ok bool) {
+	arg = strings.TrimSpace(buf.String())
+	if len(arg) > 0 {
 		ok = true
-		*bufP = buf[:0]
+		buf.Reset()
 	}
 	return
 }

@@ -45,11 +45,15 @@ func TestIsMacroDef(t *testing.T) {
 	}
 }
 
-func newTextToken(s string) *ctext.Token {
-	return &ctext.Token{
-		Type: ctext.TextToken,
-		Data: s,
-		Position: ctext.Position{
+type token struct {
+	s   string
+	pos ctext.Position
+}
+
+func newToken(s string) token {
+	return token{
+		s: s,
+		pos: ctext.Position{
 			Line:   1,
 			Column: 1,
 		},
@@ -58,18 +62,18 @@ func newTextToken(s string) *ctext.Token {
 
 func TestFindMacroFuncs(t *testing.T) {
 	var cases = []struct {
-		Input      *ctext.Token
+		Input      token
 		Names      []string
 		MacroFuncs []MacroFunc
 		ExpErr     bool
 	}{
 		{
-			Input:      newTextToken(`#define TEST_FUNC( a, b, c )  (a, b, c)`),
+			Input:      newToken(`#define TEST_FUNC( a, b, c )  (a, b, c)`),
 			MacroFuncs: []MacroFunc{},
 			ExpErr:     false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC ( );`),
+			Input: newToken(`TEST_FUNC ( );`),
 			Names: []string{"TEST_FUNC"},
 			MacroFuncs: []MacroFunc{
 				{
@@ -82,7 +86,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC( INNER_TEST_FUNC() );`),
+			Input: newToken(`TEST_FUNC( INNER_TEST_FUNC() );`),
 			Names: []string{"TEST_FUNC"},
 			MacroFuncs: []MacroFunc{
 				{
@@ -95,7 +99,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC ( "Format string: %d %s %d", a, "b \\ string", c );`),
+			Input: newToken(`TEST_FUNC ( "Format string: %d %s %d", a, "b \\ string", c );`),
 			Names: []string{"TEST_FUNC"},
 			MacroFuncs: []MacroFunc{
 				{
@@ -108,7 +112,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC(
+			Input: newToken(`TEST_FUNC(
 								    "Format string: %d %s %d",
 								    a,
 								    "b \\ string",
@@ -126,7 +130,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC ( "Format string 1: %d %s %d", a, "b \\ string", c );
+			Input: newToken(`TEST_FUNC ( "Format string 1: %d %s %d", a, "b \\ string", c );
   								 TEST_FUNC( "Format string 2: %d %s %d", "d \\ string", e , f);`),
 			Names: []string{"TEST_FUNC"},
 			MacroFuncs: []MacroFunc{
@@ -146,7 +150,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`#define TEST_FUNC( _fmt, ... )  func( _fmt, __VA_ARGS__ )
+			Input: newToken(`#define TEST_FUNC( _fmt, ... )  func( _fmt, __VA_ARGS__ )
 						  		 TEST_FUNC ( "Format string 1: %d %s %d", a, "b \\ string", c );
 						         TEST_FUNC( "Format string 2: %d %s %d", "d \\ string", e , f);`),
 			Names: []string{"TEST_FUNC"},
@@ -167,7 +171,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );
+			Input: newToken(`TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );
 								 TEST_FUNC_B( "Format string 2: %d %s %d", "d \\ string", e , f);`),
 			Names: []string{"TEST_FUNC_A", "TEST_FUNC_B"},
 			MacroFuncs: []MacroFunc{
@@ -187,7 +191,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );  // comment 1
+			Input: newToken(`TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );  // comment 1
 								 TEST_FUNC_B( "Format string 2: %d %s %d",
 									  		  "d \\ string",
 										   	  e,
@@ -210,7 +214,7 @@ func TestFindMacroFuncs(t *testing.T) {
 			ExpErr: false,
 		},
 		{
-			Input: newTextToken(`TEST_FUNC( "%d",
+			Input: newToken(`TEST_FUNC( "%d",
 					                       	1,
 					                       	INNER_TEST_FUNC( 123, "Test" )
 		                        );`),
@@ -228,7 +232,7 @@ func TestFindMacroFuncs(t *testing.T) {
 
 		// Errors
 		{
-			Input:      newTextToken(`TEST_FUNC  );`),
+			Input:      newToken(`TEST_FUNC  );`),
 			Names:      []string{"TEST_FUNC"},
 			MacroFuncs: []MacroFunc{},
 			ExpErr:     true,
@@ -237,7 +241,7 @@ func TestFindMacroFuncs(t *testing.T) {
 
 	for i, tc := range cases {
 		t.Logf("Test Case: %d", i)
-		mfs, err := FindMacroFuncs(tc.Input, tc.Names...)
+		mfs, err := FindMacroFuncs(tc.Input.s, tc.Input.pos, tc.Names...)
 		if err != nil {
 			if !tc.ExpErr {
 				t.Errorf("unexpected error: %v", err)
