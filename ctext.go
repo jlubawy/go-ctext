@@ -3,8 +3,9 @@
 // license that can be found in the LICENSE file.
 
 /*
-Package ctext implements a simple C source scanner that can be used to separate
-comments from code.
+Package ctext provides a scanner for the C programming language that separates
+source code into comment and text tokens. This may be useful to other programs
+that need to scan a program for specific text, while ignoring comments.
 */
 package ctext
 
@@ -38,6 +39,7 @@ type Position struct {
 	Column   int    // the column within the line starting at 1
 }
 
+// IsValid returns true if the position is valid (line > 0).
 func (pos Position) IsValid() bool {
 	return pos.Line > 0
 }
