@@ -53,3 +53,27 @@ The resulting output would look like this:
 
     <comment> hello_world.c:1:1: "/**\n * hello_world.c\n */"
     <text>    hello_world.c:3:4: "\n\n#include <stdio.h>\n\nint\nmain( void )\n{\n    fputs( \"Hello world\\n\", stdout );\n    return 0;\n}\n"
+
+# Ctext Command
+
+## Installation
+
+Install the latest: ```go get -u github.com/jlubawy/go-text/ctext```
+
+## Usage
+
+```
+Usage: ctext command [options]
+
+Available commands:
+
+    strip           strip comments from a C source file
+
+Use "ctext help [command]" for more information about that command.
+```
+
+## Example
+
+To strip the comments from a C source file:
+
+    curl -sG https://raw.githubusercontent.com/mattn/go-sqlite3/master/sqlite3-binding.c | ctext strip
