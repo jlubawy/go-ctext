@@ -34,9 +34,10 @@ const (
 
 // A Position is the position within a file.
 type Position struct {
-	Filename string // the name of the file
-	Line     int    // the line within the file starting at 1
-	Column   int    // the column within the line starting at 1
+	Filename string // filename, if any
+	Offset   int    // byte offset, starting at 0
+	Line     int    // line number, starting at 1
+	Column   int    // column number, starting at 1 (character count per line)
 }
 
 // IsValid returns true if the position is valid (line > 0).
@@ -103,6 +104,7 @@ func (s *Scanner) Next() (tt TokenType) {
 	s.buf.Reset()
 
 	// Reset and invalidate the current position
+	s.Position.Offset = s.posCurr.Offset
 	s.Position.Line = 0
 	s.Position.Column = 0
 
@@ -190,17 +192,6 @@ func (s *Scanner) Next() (tt TokenType) {
 				}
 			}
 
-		case '\r':
-			// Discard and wait for the \n
-			_, s.err = s.br.Discard(1)
-			if s.err != nil {
-				return ErrorToken
-			}
-
-			s.posCurr.Column += 1
-
-			continue
-
 		case '\n':
 			// Increment the line and reset the current column
 			s.posCurr.Line += 1
@@ -229,6 +220,7 @@ func (s *Scanner) Next() (tt TokenType) {
 			return ErrorToken
 		}
 
+		s.posCurr.Offset += 1
 		s.posCurr.Column += 1
 
 		s.err = s.buf.WriteByte(b)
