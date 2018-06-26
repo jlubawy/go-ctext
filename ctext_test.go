@@ -5,6 +5,7 @@
 package ctext
 
 import (
+	"bytes"
 	"io"
 	"reflect"
 	"strings"
@@ -105,5 +106,53 @@ func TestOffsets(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestStripComments(t *testing.T) {
+	var input = strings.Join([]string{
+		`/**`,
+		` * hello_world.c`,
+		` */`,
+		``,
+		`// Comment `,
+		`#include <stdio.h> `,
+		``,
+		`// Comment`,
+		`int`,
+		`main( void )`,
+		`{`,
+		`    fputs( "Hello world\n", stdout ); // Comment`,
+		`    return 0;`,
+		`}`,
+		``,
+	}, "\n")
+
+	var expected = strings.Join([]string{
+		``,
+		``,
+		``,
+		``,
+		``,
+		`#include <stdio.h> `,
+		``,
+		``,
+		`int`,
+		`main( void )`,
+		`{`,
+		`    fputs( "Hello world\n", stdout ); `, // notice space at end of line
+		`    return 0;`,
+		`}`,
+		``,
+	}, "\n")
+
+	buf := &bytes.Buffer{}
+	if err := StripComments(buf, strings.NewReader(input)); err != nil {
+		t.Fatal(err)
+	}
+	actual := buf.String()
+	if actual != expected {
+		t.Errorf("%q", expected)
+		t.Errorf("%q", actual)
 	}
 }

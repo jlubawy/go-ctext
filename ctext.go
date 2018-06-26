@@ -237,3 +237,43 @@ func (s *Scanner) Next() (tt TokenType) {
 func (s *Scanner) TokenText() string {
 	return s.buf.String()
 }
+
+// StripComments strips all comments from the given io.Reader and writes the
+// resulting output to the io.Writer, returning and error if any.
+func StripComments(w io.Writer, r io.Reader) (err error) {
+	bw := bufio.NewWriter(w)
+	defer bw.Flush()
+
+	s := NewScanner(r)
+	for {
+		tt := s.Next()
+		switch tt {
+		case ErrorToken:
+			err = s.Err()
+			if err == io.EOF {
+				err = nil
+				return
+			}
+
+		case CommentToken:
+			comment := s.TokenText()
+			for i := 0; i < len(comment); i++ {
+				c := comment[i]
+				if c == '\r' || c == '\n' {
+					err = bw.WriteByte(c)
+					if err != nil {
+						return
+					}
+				}
+			}
+
+		case TextToken:
+			_, err = bw.WriteString(s.TokenText())
+			if err != nil {
+				return
+			}
+		}
+	}
+
+	return
+}
