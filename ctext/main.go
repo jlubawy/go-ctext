@@ -25,8 +25,17 @@ var commands = []Command{
 	stripCommand,
 }
 
+const mainUsage = `Usage: ctext command [options]
+
+Available commands:
+
+    strip           strip comments from a C source file
+
+Use "ctext help [command]" for more information about that command.
+`
+
 func main() {
-	flag.Usage = usage
+	flag.Usage = func() { info(mainUsage) }
 	flag.Parse()
 
 	if flag.NArg() == 0 {
@@ -53,17 +62,6 @@ func main() {
 	fatalf(`ctext: unknown command "%s"
 Run 'ctext help' for usage.
 `, flag.Arg(1))
-}
-
-func usage() {
-	info(`Usage: ctext command [options]
-
-Available commands:
-
-    strip           strip comments from a C source file
-
-Use "ctext help [command]" for more information about that command.
-`)
 }
 
 func info(s string) {
