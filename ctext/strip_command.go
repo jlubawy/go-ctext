@@ -41,7 +41,7 @@ var stripCommand = Command{
 		if fs.NArg() == 0 {
 			r = os.Stdin
 		} else if fs.NArg() == 1 {
-			f, err := os.OpenFile(fs.Arg(0), os.O_RDONLY, 0644)
+			f, err := os.OpenFile(fs.Arg(0), os.O_RDONLY, 0664)
 			if err != nil {
 				fatalf("Error opening input file: %v\n", err)
 			}
@@ -55,7 +55,7 @@ var stripCommand = Command{
 		if flagOutput == "" {
 			w = os.Stdout
 		} else {
-			f, err := os.OpenFile(flagOutput, os.O_CREATE|os.O_WRONLY, 0644)
+			f, err := os.OpenFile(flagOutput, os.O_CREATE|os.O_WRONLY, 0664)
 			if err != nil {
 				fatalf("Error opening output file: %v\n", err)
 			}
