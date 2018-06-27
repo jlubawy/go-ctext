@@ -12,11 +12,16 @@ import (
 	"github.com/jlubawy/go-ctext"
 )
 
+const stripUsage = `usage: strip [-output output] [source file]
+Run 'ctext help strip' for details.
+`
+
 var stripCommand = Command{
 	Name: "strip",
 	CmdFn: func(args []string) {
 		var flagOutput string
 		fs := flag.NewFlagSet("strip", flag.ExitOnError)
+		fs.Usage = func() { info(stripUsage) }
 		fs.StringVar(&flagOutput, "output", "", "file to output to, stdout if empty")
 		fs.Parse(args)
 
