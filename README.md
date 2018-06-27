@@ -58,7 +58,7 @@ The resulting output would look like this:
 
 ## Installation
 
-Install the latest: ```go get -u github.com/jlubawy/go-text/ctext```
+Install the latest: ```go get -u github.com/jlubawy/go-ctext/ctext```
 
 ## Usage
 
