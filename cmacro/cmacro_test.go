@@ -8,11 +8,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/jlubawy/go-ctext"
 )
 
-func TestIsMacroDef(t *testing.T) {
+func TestIsMacroDefinition(t *testing.T) {
 	var cases = []struct {
 		Input string
 		IsDef bool
@@ -39,192 +37,178 @@ func TestIsMacroDef(t *testing.T) {
 			t.Fatal("expected to find TEST_FUNC but didn't")
 		}
 
-		if isDef := isMacroDef(tc.Input, ni); isDef != tc.IsDef {
+		if isDef := isMacroDefinition(tc.Input, ni); isDef != tc.IsDef {
 			t.Errorf("expected %t but got %t", tc.IsDef, isDef)
 		}
 	}
 }
 
-type token struct {
-	s   string
-	pos ctext.Position
-}
-
-func newToken(s string) token {
-	return token{
-		s: s,
-		pos: ctext.Position{
-			Line:   1,
-			Column: 1,
-		},
-	}
-}
-
-func TestFindMacroFuncs(t *testing.T) {
+func TestScanInvocationsString(t *testing.T) {
 	var cases = []struct {
-		Input      token
-		Names      []string
-		MacroFuncs []MacroFunc
-		ExpErr     bool
+		Input string
+		Names []string
+
+		Expected []Invocation
+		ExpErr   bool
 	}{
 		{
-			Input:      newToken(`#define TEST_FUNC( a, b, c )  (a, b, c)`),
-			MacroFuncs: []MacroFunc{},
-			ExpErr:     false,
+			Input:    `#define TEST_FUNC( a, b, c )  (a, b, c)`,
+			Expected: []Invocation{},
+			ExpErr:   false,
 		},
 		{
-			Input: newToken(`TEST_FUNC ( );`),
+			Input: `TEST_FUNC ( );`,
 			Names: []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{},
-					LineStart: 1,
-					LineEnd:   1,
+					Name:  "TEST_FUNC",
+					Args:  []string{},
+					Start: 1,
+					End:   1,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`TEST_FUNC( INNER_TEST_FUNC() );`),
+			Input: `TEST_FUNC( INNER_TEST_FUNC() );`,
 			Names: []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"INNER_TEST_FUNC()"},
-					LineStart: 1,
-					LineEnd:   1,
+					Name:  "TEST_FUNC",
+					Args:  []string{"INNER_TEST_FUNC()"},
+					Start: 1,
+					End:   1,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`TEST_FUNC ( "Format string: %d %s %d", a, "b \\ string", c );`),
+			Input: `TEST_FUNC ( "Format string: %d %s %d", a, "b \\ string", c );`,
 			Names: []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"\"Format string: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
-					LineStart: 1,
-					LineEnd:   1,
+					Name:  "TEST_FUNC",
+					Args:  []string{"\"Format string: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
+					Start: 1,
+					End:   1,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`TEST_FUNC(
+			Input: `TEST_FUNC(
 								    "Format string: %d %s %d",
 								    a,
 								    "b \\ string",
 								    c
-								);`),
+								);`,
 			Names: []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"\"Format string: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
-					LineStart: 1,
-					LineEnd:   6,
+					Name:  "TEST_FUNC",
+					Args:  []string{"\"Format string: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
+					Start: 1,
+					End:   6,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`TEST_FUNC ( "Format string 1: %d %s %d", a, "b \\ string", c );
-  								 TEST_FUNC( "Format string 2: %d %s %d", "d \\ string", e , f);`),
+			Input: `TEST_FUNC ( "Format string 1: %d %s %d", a, "b \\ string", c );
+  								 TEST_FUNC( "Format string 2: %d %s %d", "d \\ string", e , f);`,
 			Names: []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
-					LineStart: 1,
-					LineEnd:   1,
+					Name:  "TEST_FUNC",
+					Args:  []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
+					Start: 1,
+					End:   1,
 				},
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
-					LineStart: 2,
-					LineEnd:   2,
+					Name:  "TEST_FUNC",
+					Args:  []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
+					Start: 2,
+					End:   2,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`#define TEST_FUNC( _fmt, ... )  func( _fmt, __VA_ARGS__ )
+			Input: `#define TEST_FUNC( _fmt, ... )  func( _fmt, __VA_ARGS__ )
 						  		 TEST_FUNC ( "Format string 1: %d %s %d", a, "b \\ string", c );
-						         TEST_FUNC( "Format string 2: %d %s %d", "d \\ string", e , f);`),
+						         TEST_FUNC( "Format string 2: %d %s %d", "d \\ string", e , f);`,
 			Names: []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
-					LineStart: 2,
-					LineEnd:   2,
+					Name:  "TEST_FUNC",
+					Args:  []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
+					Start: 2,
+					End:   2,
 				},
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
-					LineStart: 3,
-					LineEnd:   3,
+					Name:  "TEST_FUNC",
+					Args:  []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
+					Start: 3,
+					End:   3,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );
-								 TEST_FUNC_B( "Format string 2: %d %s %d", "d \\ string", e , f);`),
+			Input: `TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );
+								 TEST_FUNC_B( "Format string 2: %d %s %d", "d \\ string", e , f);`,
 			Names: []string{"TEST_FUNC_A", "TEST_FUNC_B"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC_A",
-					Args:      []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
-					LineStart: 1,
-					LineEnd:   1,
+					Name:  "TEST_FUNC_A",
+					Args:  []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
+					Start: 1,
+					End:   1,
 				},
 				{
-					Name:      "TEST_FUNC_B",
-					Args:      []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
-					LineStart: 2,
-					LineEnd:   2,
+					Name:  "TEST_FUNC_B",
+					Args:  []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
+					Start: 2,
+					End:   2,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );  // comment 1
+			Input: `TEST_FUNC_A( "Format string 1: %d %s %d", a, "b \\ string", c );  // comment 1
 								 TEST_FUNC_B( "Format string 2: %d %s %d",
 									  		  "d \\ string",
 										   	  e,
-											  f );`),
+											  f );`,
 			Names: []string{"TEST_FUNC_A", "TEST_FUNC_B"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC_A",
-					Args:      []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
-					LineStart: 1,
-					LineEnd:   1,
+					Name:  "TEST_FUNC_A",
+					Args:  []string{"\"Format string 1: %d %s %d\"", "a", "\"b \\\\ string\"", "c"},
+					Start: 1,
+					End:   1,
 				},
 				{
-					Name:      "TEST_FUNC_B",
-					Args:      []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
-					LineStart: 2,
-					LineEnd:   5,
+					Name:  "TEST_FUNC_B",
+					Args:  []string{"\"Format string 2: %d %s %d\"", "\"d \\\\ string\"", "e", "f"},
+					Start: 2,
+					End:   5,
 				},
 			},
 			ExpErr: false,
 		},
 		{
-			Input: newToken(`TEST_FUNC( "%d",
+			Input: `TEST_FUNC( "%d",
 					                       	1,
 					                       	INNER_TEST_FUNC( 123, "Test" )
-		                        );`),
+		                        );`,
 			Names: []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{
+			Expected: []Invocation{
 				{
-					Name:      "TEST_FUNC",
-					Args:      []string{"\"%d\"", "1", "INNER_TEST_FUNC( 123, \"Test\" )"},
-					LineStart: 1,
-					LineEnd:   4,
+					Name:  "TEST_FUNC",
+					Args:  []string{"\"%d\"", "1", "INNER_TEST_FUNC( 123, \"Test\" )"},
+					Start: 1,
+					End:   4,
 				},
 			},
 			ExpErr: false,
@@ -232,16 +216,18 @@ func TestFindMacroFuncs(t *testing.T) {
 
 		// Errors
 		{
-			Input:      newToken(`TEST_FUNC  );`),
-			Names:      []string{"TEST_FUNC"},
-			MacroFuncs: []MacroFunc{},
-			ExpErr:     true,
+			Input:    `TEST_FUNC  );`,
+			Names:    []string{"TEST_FUNC"},
+			Expected: []Invocation{},
+			ExpErr:   true,
 		},
 	}
 
 	for i, tc := range cases {
 		t.Logf("Test Case: %d", i)
-		mfs, err := FindMacroFuncs(tc.Input.s, tc.Input.pos, tc.Names...)
+
+		actual := make([]Invocation, 0)
+		err := ScanInvocationsString(tc.Input, func(i Invocation) { actual = append(actual, i) }, tc.Names...)
 		if err != nil {
 			if !tc.ExpErr {
 				t.Errorf("unexpected error: %v", err)
@@ -250,10 +236,10 @@ func TestFindMacroFuncs(t *testing.T) {
 			if tc.ExpErr {
 				t.Error("expected error")
 			} else {
-				if !reflect.DeepEqual(tc.MacroFuncs, mfs) {
+				if !reflect.DeepEqual(tc.Expected, actual) {
 					t.Error("data mismatch")
-					t.Errorf("%+v", tc.MacroFuncs)
-					t.Errorf("%+v", mfs)
+					t.Errorf("%+v", tc.Expected)
+					t.Errorf("%+v", actual)
 				}
 			}
 		}

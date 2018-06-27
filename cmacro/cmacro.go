@@ -3,13 +3,17 @@
 // license that can be found in the LICENSE file.
 
 /*
-Package cmacro finds all function-like macros called within a C source file.
+Package cmacro provides a scanner for the C programming language that returns
+function-like macro invocations. This may be useful to other programs
+that need to scan a program for specific macro invocation
 */
 package cmacro
 
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
@@ -17,67 +21,60 @@ import (
 	"github.com/jlubawy/go-ctext/internal"
 )
 
-// A MacroFunc is an invocation of a function-like macro within C source code.
-type MacroFunc struct {
-	// Name is the name of the macro function.
-	Name string
-
-	// Args is a slice of strings that are the arguments for a given function.
-	Args []string
-
-	// LineStart is the line that the macro invocation starts on.
-	LineStart int
-
-	// LineEnd is the line that the macro invocation end on.
-	LineEnd int
+// An Invocation is an invocation of a function-like macro within C source code.
+type Invocation struct {
+	Name       string   // name of the macro invocation
+	Start, End int      // lines that the macro invocation starts and ends on
+	Args       []string // arguments to the macro invocation if any
 }
 
-func isMacroDef(s string, ni int) (isDef bool) {
-	if ni >= 8 {
-		i := ni - 1
-		for ; i >= 0; i-- {
-			if s[i] != ' ' {
-				break
+func (inv Invocation) String() string {
+	return fmt.Sprintf("%s( %s );", inv.Name, strings.Join(inv.Args, ", "))
+}
+
+// ScanInvocations scans the provided io.Reader for macro invocations that match
+// the given names, returning any via the provided callback.
+func ScanInvocations(r io.Reader, scanFunc func(inv Invocation), names ...string) (err error) {
+	s := ctext.NewScanner(r)
+	for {
+		tt := s.Next()
+		switch tt {
+		case ctext.ErrorToken:
+			err = s.Err()
+			if err == io.EOF {
+				err = nil
 			}
-		}
-		if i >= 6 {
-			if s[i-5:i+1] == "define" {
-				for j := i - 6; j >= 0; j-- {
-					switch s[j] {
-					case ' ':
-						// skip spaces
-					case '#':
-						isDef = true
-						return
-					default:
-						return
-					}
-				}
+			return
+
+		case ctext.TextToken:
+			err = scanInvocationsTextToken(s.TokenText(), s.Position, scanFunc, names...)
+			if err != nil {
+				return
 			}
 		}
 	}
 	return
 }
 
-// FindMacroFuncs finds all invocations of the macro functions matching
-// the provided names in a given string.
-func FindMacroFuncs(s string, pos ctext.Position, names ...string) (mfs []MacroFunc, err error) {
+// ScanInvocationsString scans the provided string for macro invocations that
+// match the given names, returning any via the provided callback.
+func ScanInvocationsString(s string, scanFunc func(inv Invocation), names ...string) (err error) {
+	return ScanInvocations(strings.NewReader(s), scanFunc, names...)
+}
+
+// scanInvocationsTextToken scans the provided text token for macro invocations
+// that match the given names, returning any via the provided callback.
+func scanInvocationsTextToken(s string, pos ctext.Position, scanFunc func(inv Invocation), names ...string) (err error) {
 	var re *regexp.Regexp
 	re, err = compileNamesRegexp(names...)
 	if err != nil {
 		return
 	}
 
-	return FindMacroFuncsRegexp(s, pos, re)
-}
-
-// FindMacroFuncsRegexp finds all invocations of the macro functions matching
-// the provided regexp in a given string.
-func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs []MacroFunc, err error) {
-	mfs = make([]MacroFunc, 0)
-
-	var lineCurr = pos.Line
-
+	var (
+		lineCurr = pos.Line
+		inv      Invocation
+	)
 	for {
 		// Find the next instance of the macro name
 		loc := re.FindStringIndex(s)
@@ -98,7 +95,7 @@ func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs 
 		}
 
 		// Check if this is a macro definition and not an invocation
-		isDef := isMacroDef(s, ni)
+		isDef := isMacroDefinition(s, ni)
 
 		// Shorten the string length to look after the name
 		s = s[ni+len(name):]
@@ -107,11 +104,10 @@ func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs 
 			continue // skip if this was a definition
 		}
 
-		mf := MacroFunc{
-			Name:      name,
-			Args:      make([]string, 0),
-			LineStart: lineCurr,
-		}
+		// Reset the local invocation
+		inv.Name = name
+		inv.Args = make([]string, 0)
+		inv.Start = lineCurr
 
 		// Find the opening parentheses
 		opi := strings.Index(s, "(")
@@ -143,9 +139,9 @@ func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs 
 					}
 				} else if parenCount == 0 {
 					// Else it's probably the end of an argument
-					arg, ok := parseArg(buf)
+					arg, ok := parseInvocationArg(buf)
 					if ok {
-						mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
+						inv.Args = append(inv.Args, strings.TrimSpace(string(arg)))
 					}
 				}
 
@@ -158,9 +154,9 @@ func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs 
 					}
 				} else if parenCount == 0 {
 					// Else it's probably the end of an argument
-					arg, ok := parseArg(buf)
+					arg, ok := parseInvocationArg(buf)
 					if ok {
-						mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
+						inv.Args = append(inv.Args, strings.TrimSpace(string(arg)))
 					}
 				}
 
@@ -183,9 +179,9 @@ func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs 
 							return
 						}
 						if parenCount == 0 {
-							arg, ok := parseArg(buf)
+							arg, ok := parseInvocationArg(buf)
 							if ok {
-								mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
+								inv.Args = append(inv.Args, strings.TrimSpace(string(arg)))
 							}
 						}
 					}
@@ -230,9 +226,9 @@ func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs 
 					}
 
 					if parenCount == 0 {
-						arg, ok := parseArg(buf)
+						arg, ok := parseInvocationArg(buf)
 						if ok {
-							mf.Args = append(mf.Args, strings.TrimSpace(string(arg)))
+							inv.Args = append(inv.Args, strings.TrimSpace(string(arg)))
 						}
 					}
 				}
@@ -247,8 +243,8 @@ func FindMacroFuncsRegexp(s string, pos ctext.Position, re *regexp.Regexp) (mfs 
 				} else {
 					// Else if not in a string literal, close out the invocation
 					// and find the next one.
-					mf.LineEnd = lineCurr
-					mfs = append(mfs, mf)
+					inv.End = lineCurr
+					scanFunc(inv)
 					done = true
 				}
 
@@ -276,9 +272,36 @@ DONE:
 	return
 }
 
-// parseArg returns an argument string and shortens the buffer length to zero if
+func isMacroDefinition(s string, ni int) (isDef bool) {
+	if ni >= 8 {
+		i := ni - 1
+		for ; i >= 0; i-- {
+			if s[i] != ' ' {
+				break
+			}
+		}
+		if i >= 6 {
+			if s[i-5:i+1] == "define" {
+				for j := i - 6; j >= 0; j-- {
+					switch s[j] {
+					case ' ':
+						// skip spaces
+					case '#':
+						isDef = true
+						return
+					default:
+						return
+					}
+				}
+			}
+		}
+	}
+	return
+}
+
+// parseInvocationArg returns an argument string and shortens the buffer length to zero if
 // the provided buffer isn't empty.
-func parseArg(buf *bytes.Buffer) (arg string, ok bool) {
+func parseInvocationArg(buf *bytes.Buffer) (arg string, ok bool) {
 	arg = strings.TrimSpace(buf.String())
 	if len(arg) > 0 {
 		ok = true
