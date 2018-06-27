@@ -16,10 +16,22 @@ const stripUsage = `usage: strip [-output output] [source file]
 Run 'ctext help strip' for details.
 `
 
+const stripHelp = `usage: ctext strip [-output output] [source file]
+
+Strips comments from a C source file. If a file is not provided then the source
+is read from stdin.
+
+Options:
+
+	-output        file to output the stripped source to, or stdout if empty
+
+`
+
 var stripCommand = Command{
 	Name: "strip",
 	CmdFn: func(args []string) {
 		var flagOutput string
+
 		fs := flag.NewFlagSet("strip", flag.ExitOnError)
 		fs.Usage = func() { info(stripUsage) }
 		fs.StringVar(&flagOutput, "output", "", "file to output to, stdout if empty")
@@ -55,12 +67,5 @@ var stripCommand = Command{
 			fatalf("Error stripping comments: %v\n", err)
 		}
 	},
-	HelpFn: func() {
-		info(`usage: ctext strip [-output output] [source file]
-
-Strip comments from a C source file provided as an argument or from stdin.
-The stripped source file is then written to the provided [-output] file or to
-stdout if no file is provided.
-`)
-	},
+	HelpFn: func() { info(stripHelp) },
 }
