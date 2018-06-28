@@ -14,7 +14,8 @@ import (
 )
 
 var program = cli.Program{
-	Name: "ctext",
+	Name:        "ctext",
+	Description: "Ctext is a program for manipulating C source code.",
 	Commands: []cli.Command{
 		stripCommand,
 	},

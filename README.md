@@ -62,15 +62,18 @@ Install the latest: ```go get -u github.com/jlubawy/go-ctext/ctext```
 
 ## Usage
 
-```
-Usage: ctext command [options]
+    $ ./ctext help
+    Ctext is a program for manipulating C source code.
 
-Available commands:
+    Usage:
 
-    strip           strip comments from a C source file
+        ctext command [options]
 
-Use "ctext help [command]" for more information about that command.
-```
+    The commands are:
+
+        strip      strip comments from a C source file
+
+    Use "ctext help [command]" for more Information about a command.
 
 ## Example
 
